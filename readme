@@ -1,0 +1,13 @@
+cd read_example
+mkdir build && cd build
+cmake ../
+make
+./test_read
+
+
+# If unable to find include/lib for io_uring:
+execute the .sh in the install_instructions folder
+
+reboot machine
+
+repeat above steps
