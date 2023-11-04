@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <liburing.h>
 
+//#define ALIGN_MEMORY
+
 struct io_uring g_ring;
 
 const int MAX_BLOCK_SIZE = 256;
@@ -11,9 +13,12 @@ void emplace_request(int fd, int num_bytes, int offset)
 {
     struct iovec* request = calloc(1, sizeof(struct iovec));
     request->iov_len = num_bytes;
+#ifdef ALIGN_MEMORY
     // make sure memory is alligned on a power of 2 
     posix_memalign(&request->iov_base, MAX_BLOCK_SIZE, num_bytes);
-
+#else
+    request->iov_base = calloc(num_bytes, sizeof(char));
+#endif
     struct io_uring_sqe* sqe = io_uring_get_sqe(&g_ring);
     io_uring_prep_readv(sqe, fd, request, 1, offset);
     io_uring_sqe_set_data(sqe, request); 
