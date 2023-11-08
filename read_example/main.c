@@ -36,9 +36,27 @@ struct iovec* read_response()
 
 int main(int argc, char* argv[])
 {
-    io_uring_queue_init(10, &g_ring, 0);
+    // https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
+    // SQPOLL requires to run in sudo for kernel <= 5.11
+    int flags = IORING_SETUP_SQPOLL // Create kernel thread
+                | IORING_ENTER_SQ_WAKEUP; // wake up kernel thread
+    int ring_fd = io_uring_queue_init(10, &g_ring, flags);
+    if (ring_fd < 0)
+    {
+        printf("Unable to instantiate io_uring w/ error code %d\n", ring_fd);
+        return -1;
+    }
 
     int fd = open("sample.txt", O_RDONLY);
+
+    // https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
+    // required to register all files when running kernel <= 5.11
+    int status = io_uring_register(ring_fd, IORING_REGISTER_FILES, &fd, 1);
+    if (status < 0)
+    {
+        printf("Unable to register file with io_uring w/ error code %d\n", status);
+        return -1;
+    }
 
     emplace_request(fd, 187, 0);
 
