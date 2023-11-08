@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
 
     // https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
     // required to register all files when running kernel <= 5.11
-    int status = io_uring_register(ring_fd, IORING_REGISTER_FILES, &fd, 1);
+    int status = io_uring_register_files(&g_ring, &fd, 1);
     if (status < 0)
     {
         printf("Unable to register file with io_uring w/ error code %d\n", status);
