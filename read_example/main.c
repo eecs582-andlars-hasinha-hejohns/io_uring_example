@@ -38,8 +38,7 @@ int main(int argc, char* argv[])
 {
     // https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
     // SQPOLL requires to run in sudo for kernel <= 5.11
-    int flags = IORING_SETUP_SQPOLL // Create kernel thread
-                | IORING_ENTER_SQ_WAKEUP; // wake up kernel thread
+    int flags = IORING_SETUP_SQPOLL; // Create kernel thread
     int ring_fd = io_uring_queue_init(10, &g_ring, flags);
     if (ring_fd < 0)
     {
