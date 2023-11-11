@@ -22,6 +22,9 @@ void emplace_request(int fd, int num_bytes, int offset)
     struct io_uring_sqe* sqe = io_uring_get_sqe(&g_ring);
     io_uring_prep_readv(sqe, fd, request, 1, offset);
     io_uring_sqe_set_data(sqe, request); 
+    // use fd from array previously registered
+    sqe->flags |= IOSQE_FIXED_FILE;
+    sqe->fd = 0;
     io_uring_submit(&g_ring);
 }
 
