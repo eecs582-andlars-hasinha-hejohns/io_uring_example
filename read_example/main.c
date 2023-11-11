@@ -72,5 +72,7 @@ int main(int argc, char* argv[])
 
     free(ret);
 
+    io_uring_queue_exit(&g_ring);
+
     return 0;
 }
