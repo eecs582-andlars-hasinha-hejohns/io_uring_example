@@ -22,9 +22,6 @@ void emplace_request(int fd, int num_bytes, int offset)
     struct io_uring_sqe* sqe = io_uring_get_sqe(&g_ring);
     io_uring_prep_readv(sqe, fd, request, 1, offset);
     io_uring_sqe_set_data(sqe, request); 
-    // use fd from array previously registered
-    sqe->flags |= IOSQE_FIXED_FILE;
-    sqe->fd = 0;
     io_uring_submit(&g_ring);
 }
 
@@ -50,15 +47,6 @@ int main(int argc, char* argv[])
     }
 
     int fd = open("sample.txt", O_RDONLY);
-
-    // https://man7.org/linux/man-pages/man2/io_uring_setup.2.html
-    // required to register all files when running kernel <= 5.11
-    int status = io_uring_register_files(&g_ring, &fd, 1);
-    if (status < 0)
-    {
-        printf("Unable to register file with io_uring w/ error code %d\n", status);
-        return -1;
-    }
 
     emplace_request(fd, 187, 0);
 
