@@ -29,7 +29,7 @@ __libc_write (int fd, const void *buf, size_t nbytes)
 
   // emplace request
   struct iovec request;
-  request.iov_base = buf;
+  request.iov_base = (void*)buf;
   request.iov_len  = nbytes;
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_writev(sqe, fd, &request, 1, 0);
