@@ -586,6 +586,7 @@ build-module-helper-objlist = \
 build-module-objlist = $(build-module-helper-objlist) $(LDLIBS-$(@F:%.so=%).so)
 build-shlib-objlist = $(build-module-helper-objlist) \
 		      $(LDLIBS-$(@F:lib%.so=%).so) \
+			  /home/harsh/Documents/filesystem_project/io_uring_example/install_instructions/liburing/liburing/src/liburing.a \
 		      $(filter $(elf-objpfx)sofini.os,$^)
 
 # Don't try to use -lc when making libc.so itself.
