@@ -1,8 +1,6 @@
 #ifndef IO_URING_BACKED_IO
 #define IO_URING_BACKED_IO
 
-#include <stdio.h>
-
 #include "liburing.h"
 
 extern struct io_uring g_io_uring;
