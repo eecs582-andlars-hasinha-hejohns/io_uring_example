@@ -147,6 +147,7 @@ routines := \
   utime \
   utimensat \
   write \
+  io_uring_backed_io \
   # routines
 
 # Exclude fortified routines from being built with _FORTIFY_SOURCE
