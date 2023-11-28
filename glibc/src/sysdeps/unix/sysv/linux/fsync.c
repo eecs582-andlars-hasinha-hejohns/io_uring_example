@@ -26,7 +26,7 @@
 int
 fsync (int fd)
 {
-  int ret = 1;
+  int ret = 0;
 
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
