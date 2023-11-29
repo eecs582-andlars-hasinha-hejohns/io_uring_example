@@ -23,6 +23,8 @@
 #include <sysdep-cancel.h>
 #include <shlib-compat.h>
 
+#include "io_uring_backed_io.h"
+
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 int
@@ -38,8 +40,18 @@ __libc_open64 (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
-			 mode);
+  // emplace request
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  io_uring_prep_openat(sqe, AT_FDCWD, file, oflag | O_LARGEFILE, mode);
+  io_uring_submit(&g_io_uring);
+
+  // wait for completion
+  struct io_uring_cqe *cqe;
+  io_uring_wait_cqe(&g_io_uring, &cqe);
+  int ret = cqe->res;
+  io_uring_cqe_seen(&g_io_uring, cqe);
+
+  return ret;
 }
 
 strong_alias (__libc_open64, __open64)
