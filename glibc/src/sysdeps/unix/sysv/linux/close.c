@@ -26,8 +26,6 @@
 int
 __close (int fd)
 {
-  int ret = 0;
-
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_close(sqe, fd);
@@ -36,10 +34,7 @@ __close (int fd)
   // wait for completion
   struct io_uring_cqe *cqe;
   io_uring_wait_cqe(&g_io_uring, &cqe);
-  if (cqe->res < 0)
-  {
-    ret = cqe->res;
-  }
+  int ret = cqe->res;
   io_uring_cqe_seen(&g_io_uring, cqe);
 
   return ret;
