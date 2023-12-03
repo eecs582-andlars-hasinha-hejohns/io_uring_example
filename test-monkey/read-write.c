@@ -39,6 +39,9 @@ void io_uring_infra_deinit(void)
 int
 open (const char *file, int oflag, ...)
 {
+  if(!g_io_uring_initialized){
+      io_uring_infra_init();
+  }
   int mode = 0;
 
   if (__CHECK_OPEN_NEEDS_MODE (oflag))
@@ -130,6 +133,9 @@ write (int fd, const void *buf, size_t nbytes)
 int
 fsync (int fd)
 {
+  if(!g_io_uring_initialized){
+      io_uring_infra_init();
+  }
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_fsync(sqe, fd, 0);
@@ -149,6 +155,9 @@ fsync (int fd)
 int
 close (int fd)
 {
+  if(!g_io_uring_initialized){
+      io_uring_infra_init();
+  }
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_close(sqe, fd);
