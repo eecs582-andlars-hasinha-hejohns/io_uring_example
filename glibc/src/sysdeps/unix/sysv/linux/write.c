@@ -38,10 +38,7 @@ __libc_write (int fd, const void *buf, size_t nbytes)
   // wait for completion
   struct io_uring_cqe *cqe;
   io_uring_wait_cqe(&g_io_uring, &cqe);
-  if (cqe->res < 0)
-  {
-    ret = cqe->res;
-  }
+  ret = cqe->res;
   io_uring_cqe_seen(&g_io_uring, cqe);
 
   return ret;
