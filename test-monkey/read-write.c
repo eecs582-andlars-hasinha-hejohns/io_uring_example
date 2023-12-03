@@ -37,7 +37,7 @@ void io_uring_infra_deinit(void)
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 int
-open64 (const char *file, int oflag, ...)
+open (const char *file, int oflag, ...)
 {
   int mode = 0;
 
