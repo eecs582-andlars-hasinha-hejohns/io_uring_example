@@ -32,7 +32,7 @@ __libc_read (int fd, void *buf, size_t nbytes)
   request.iov_base = buf;
   request.iov_len  = nbytes;
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
-  io_uring_prep_readv(sqe, fd, &request, 1, 0);
+  io_uring_prep_readv(sqe, fd, &request, 1, -1);
   io_uring_submit(&g_io_uring);
 
   // wait for completion
