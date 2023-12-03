@@ -57,7 +57,7 @@ read (int fd, void *buf, size_t nbytes)
   //memset(buf2, 0, ret + 1);
   //memcpy(buf2, buf, ret);
   //printf("[straceish]: read {fd = %d, buf = [%s]} = %ld\n", fd, buf2, ret);
-  printf("[read] {fd = %d } = %ld\n", fd, ret);
+  //printf("[read] {fd = %d } = %ld\n", fd, ret);
 
   return ret;
 }
