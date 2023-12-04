@@ -13,6 +13,12 @@
 static int g_io_uring_initialized = 0;
 struct io_uring g_io_uring;
 
+// called when shared library is unloaded
+void io_uring_infra_deinit(void)
+{
+    io_uring_queue_exit(&g_io_uring);
+}
+
 int io_uring_infra_init(void)
 {
     struct io_uring_params p;
@@ -42,14 +48,12 @@ int io_uring_infra_init(void)
     else
     {
         g_io_uring_initialized = 1;
+        if(atexit(io_uring_infra_deinit)){
+            perror("atexit");
+            exit(1);
+        }
         return 0;
     }
-}
-
-//__attribute__((at_exit))
-void io_uring_infra_deinit(void)
-{
-    io_uring_queue_exit(&g_io_uring);
 }
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
