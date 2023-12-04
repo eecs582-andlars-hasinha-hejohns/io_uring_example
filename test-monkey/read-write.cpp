@@ -26,7 +26,8 @@ thread_local static struct io_uring g_io_uring;
 // called when shared library is unloaded
 extern "C" void io_uring_infra_deinit(void)
 {
-    io_uring_queue_exit(&g_io_uring);
+    // NOTE: this segfaults
+    //io_uring_queue_exit(&g_io_uring);
 }
 
 extern "C" int io_uring_infra_init(void)
@@ -45,19 +46,34 @@ extern "C" int io_uring_infra_init(void)
         std::lock_guard<std::mutex> l(m);
         if(has_anyone_initialized_a_uring){
             p.wq_fd = if_someone_has_this_is_their_fd;
+#ifndef NDEBUG
+#ifdef DEBUG
+            std::cout << "p.wq_fd" << p.wq_fd << std::endl;
+#endif
+#endif
             p.flags |= IORING_SETUP_ATTACH_WQ;
+#ifndef NDEBUG
+#ifdef DEBUG
+            std::cout << "got here: " << __LINE__ << std::endl;
+#endif
+#endif
         }
-        int ring_fd = io_uring_queue_init_params(8, &g_io_uring, &p);
-        if (ring_fd < 0)
+#ifndef NDEBUG
+#ifdef DEBUG
+        std::cout << "&g_io_uring: " << &g_io_uring << std::endl;
+#endif
+#endif
+        int succ = io_uring_queue_init_params(1<<10, &g_io_uring, &p);
+        if (succ)
         {
-            if (ring_fd == -EINTR){
+            if (succ == -EINTR){
                 // User's problem.
-                return ring_fd;
+                return succ;
             }
             else {
                 printf("failure to init io_uring\n");
                 printf("exiting...\n");
-                printf("The failure code was %d\n", ring_fd);
+                printf("The failure code was %d\n", succ);
                 exit(EXIT_FAILURE);
             }
         }
@@ -65,7 +81,7 @@ extern "C" int io_uring_infra_init(void)
         {
             if(!has_anyone_initialized_a_uring){
                 has_anyone_initialized_a_uring = true;
-                if_someone_has_this_is_their_fd = ring_fd;
+                if_someone_has_this_is_their_fd = g_io_uring.ring_fd;
             }
             g_io_uring_initialized = 1;
             if(atexit(io_uring_infra_deinit)){
@@ -73,7 +89,11 @@ extern "C" int io_uring_infra_init(void)
                 exit(1);
             }
             //syscall();
+#ifndef NDEBUG
+#ifdef DEBUG
             std::cout << __FUNCTION__ << ": thread: " << &g_io_uring << std::endl;;
+#endif
+#endif
             return 0;
         }
     }
