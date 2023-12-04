@@ -1,4 +1,9 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <liburing/io_uring.h>
+#include <unistd.h>
+#endif
+//#include <liburing/io_uring.h>
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -7,19 +12,24 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <iostream>
+
+#include <mutex>
 
 # define __CHECK_OPEN_NEEDS_MODE(oflag) (((oflag) & O_CREAT) != 0 || ((oflag) & __O_TMPFILE) == __O_TMPFILE)
 
-static int g_io_uring_initialized = 0;
-struct io_uring g_io_uring;
+static bool has_anyone_initialized_a_uring = 0;
+static int if_someone_has_this_is_their_fd;
+thread_local static bool g_io_uring_initialized = 0;
+thread_local static struct io_uring g_io_uring;
 
 // called when shared library is unloaded
-void io_uring_infra_deinit(void)
+extern "C" void io_uring_infra_deinit(void)
 {
     io_uring_queue_exit(&g_io_uring);
 }
 
-int io_uring_infra_init(void)
+extern "C" int io_uring_infra_init(void)
 {
     struct io_uring_params p;
 
@@ -27,38 +37,51 @@ int io_uring_infra_init(void)
     assert(memset(&p, 0, sizeof(p)));
 
     // This doesn't do anything if we never look at io_sq_ring.
-    // This does not guarantee that the kernel thread will not go to sleep!
     p.sq_thread_idle = 1<<30;
 
-    p.flags = IORING_SETUP_SQPOLL;
-    int ring_fd = io_uring_queue_init_params(8, &g_io_uring, &p);
-    if (ring_fd < 0)
+    p.flags |= IORING_SETUP_SQPOLL;
+    static std::mutex m;
     {
-        if (ring_fd == -EINTR){
-            // User's problem.
-            return ring_fd;
+        std::lock_guard<std::mutex> l(m);
+        if(has_anyone_initialized_a_uring){
+            p.wq_fd = if_someone_has_this_is_their_fd;
+            p.flags |= IORING_SETUP_ATTACH_WQ;
         }
-        else {
-            printf("failure to init io_uring\n");
-            printf("exiting...\n");
-            printf("The failure code was %d\n", ring_fd);
-            exit(EXIT_FAILURE);
+        int ring_fd = io_uring_queue_init_params(8, &g_io_uring, &p);
+        if (ring_fd < 0)
+        {
+            if (ring_fd == -EINTR){
+                // User's problem.
+                return ring_fd;
+            }
+            else {
+                printf("failure to init io_uring\n");
+                printf("exiting...\n");
+                printf("The failure code was %d\n", ring_fd);
+                exit(EXIT_FAILURE);
+            }
         }
-    }
-    else
-    {
-        g_io_uring_initialized = 1;
-        if(atexit(io_uring_infra_deinit)){
-            perror("atexit");
-            exit(1);
+        else
+        {
+            if(!has_anyone_initialized_a_uring){
+                has_anyone_initialized_a_uring = true;
+                if_someone_has_this_is_their_fd = ring_fd;
+            }
+            g_io_uring_initialized = 1;
+            if(atexit(io_uring_infra_deinit)){
+                perror("atexit");
+                exit(1);
+            }
+            //syscall();
+            std::cout << __FUNCTION__ << ": thread: " << &g_io_uring << std::endl;;
+            return 0;
         }
-        return 0;
     }
 }
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
-int
+extern "C" int
 open (const char *file, int oflag, ...)
 {
   if(!g_io_uring_initialized){
@@ -107,7 +130,7 @@ open (const char *file, int oflag, ...)
 }
 
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
-ssize_t
+extern "C" ssize_t
 read (int fd, void *buf, size_t nbytes)
 {
   if(!g_io_uring_initialized){
