@@ -1,37 +1,55 @@
 #define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <liburing.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <errno.h>
 
-# define __CHECK_OPEN_NEEDS_MODE(oflag) \
-  (((oflag) & O_CREAT) != 0 || ((oflag) & __O_TMPFILE) == __O_TMPFILE)
+# define __CHECK_OPEN_NEEDS_MODE(oflag) (((oflag) & O_CREAT) != 0 || ((oflag) & __O_TMPFILE) == __O_TMPFILE)
 
-static int g_io_uring_initialized;
+static int g_io_uring_initialized = 0;
 struct io_uring g_io_uring;
 
-void io_uring_infra_init(void)
+int io_uring_infra_init(void)
 {
-    int flags = IORING_SETUP_SQPOLL;
     struct io_uring_params p;
+
+    // The resv field must be zeroed.    
+    assert(memset(&p, 0, sizeof(p)));
+
+    // This doesn't do anything if we never look at io_sq_ring.
+    // This does not guarantee that the kernel thread will not go to sleep!
     p.sq_thread_idle = 1<<30;
-    p.flags = flags;
+
+    p.flags = IORING_SETUP_SQPOLL;
     int ring_fd = io_uring_queue_init_params(8, &g_io_uring, &p);
     if (ring_fd < 0)
     {
-        printf("failure to init io_uring\n");
+        if (ring_fd == -EINTR){
+            // User's problem.
+            return ring_fd;
+        }
+        else {
+            printf("failure to init io_uring\n");
+            printf("exiting...\n");
+            printf("The failure code was %d\n", ring_fd);
+            exit(EXIT_FAILURE);
+        }
     }
     else
     {
-        printf("init success!\n");
+        g_io_uring_initialized = 1;
+        return 0;
     }
-    g_io_uring_initialized = 1;
 }
 
 //__attribute__((at_exit))
 void io_uring_infra_deinit(void)
 {
     io_uring_queue_exit(&g_io_uring);
-    printf("deinit success!\n");
 }
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
@@ -40,30 +58,48 @@ int
 open (const char *file, int oflag, ...)
 {
   if(!g_io_uring_initialized){
-      io_uring_infra_init();
+    int res = io_uring_infra_init();
+    if (res == -EINTR) {
+        // User's problem.
+        return res;
+    }
   }
   int mode = 0;
 
   if (__CHECK_OPEN_NEEDS_MODE (oflag))
-    {
-      va_list arg;
-      va_start (arg, oflag);
-      mode = va_arg (arg, int);
-      va_end (arg);
-    }
+  {
+    va_list arg;
+    va_start (arg, oflag);
+    mode = va_arg (arg, int);
+    va_end (arg);
+  }
 
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  assert(sqe != NULL);
+
   io_uring_prep_openat(sqe, AT_FDCWD, file, oflag | O_LARGEFILE, mode);
-  io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&g_io_uring);
+  assert(res > 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  io_uring_wait_cqe(&g_io_uring, &cqe);
-  int ret = cqe->res;
-  io_uring_cqe_seen(&g_io_uring, cqe);
+  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    int ret = cqe->res;
 
-  return ret;
+    io_uring_cqe_seen(&g_io_uring, cqe);
+
+    return ret;
+  }
 }
 
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
@@ -71,31 +107,38 @@ ssize_t
 read (int fd, void *buf, size_t nbytes)
 {
   if(!g_io_uring_initialized){
-      io_uring_infra_init();
+    int res = io_uring_infra_init();
+    if (res == -EINTR) {
+        // User's problem.
+        return res;
+    }
   }
   ssize_t ret = nbytes;
 
   // emplace request
-  struct iovec request;
-  request.iov_base = buf;
-  request.iov_len  = nbytes;
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
-  io_uring_prep_readv(sqe, fd, &request, 1, -1);
-  io_uring_submit(&g_io_uring);
+  io_uring_prep_read(sqe, fd, buf, nbytes, -1);
+  int res = io_uring_submit(&g_io_uring);
+  assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  io_uring_wait_cqe(&g_io_uring, &cqe);
-  ret = cqe->res;
+  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    ret = cqe->res;
 
-  io_uring_cqe_seen(&g_io_uring, cqe);
-  //char buf2[ret + 1];
-  //memset(buf2, 0, ret + 1);
-  //memcpy(buf2, buf, ret);
-  //printf("[straceish]: read {fd = %d, buf = [%s]} = %ld\n", fd, buf2, ret);
-  //printf("[read] {fd = %d } = %ld\n", fd, ret);
+    io_uring_cqe_seen(&g_io_uring, cqe);
 
-  return ret;
+    return ret;
+  }
 }
 
 /* Write NBYTES of BUF to FD.  Return the number written, or -1.  */
@@ -103,7 +146,11 @@ ssize_t
 write (int fd, const void *buf, size_t nbytes)
 {
   if(!g_io_uring_initialized){
-      io_uring_infra_init();
+    int res = io_uring_infra_init();
+    if (res == -EINTR) {
+        // User's problem.
+        return res;
+    }
   }
   ssize_t ret = nbytes;
 
@@ -113,20 +160,27 @@ write (int fd, const void *buf, size_t nbytes)
   request.iov_len  = nbytes;
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_writev(sqe, fd, &request, 1, -1);
-  io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&g_io_uring);
+  assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  io_uring_wait_cqe(&g_io_uring, &cqe);
-  ret = cqe->res;
-  io_uring_cqe_seen(&g_io_uring, cqe);
+  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    ret = cqe->res;
 
-  //char buf2[ret + 1];
-  //memset(buf2, 0, ret + 1);
-  //memcpy(buf2, buf, ret);
-  //printf("[straceish]: write {fd = %d, buf = [%s]} = %ld\n", fd, buf2, ret);
+    io_uring_cqe_seen(&g_io_uring, cqe);
 
-  return ret;
+    return ret;
+  }
 }
 
 /* Make all changes done to FD actually appear on disk.  */
@@ -134,20 +188,36 @@ int
 fsync (int fd)
 {
   if(!g_io_uring_initialized){
-      io_uring_infra_init();
+    int res = io_uring_infra_init();
+    if (res == -EINTR) {
+        // User's problem.
+        return res;
+    }
   }
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_fsync(sqe, fd, 0);
-  io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&g_io_uring);
+  assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  io_uring_wait_cqe(&g_io_uring, &cqe);
-  int ret = cqe->res;
-  io_uring_cqe_seen(&g_io_uring, cqe);
+  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    int ret = cqe->res;
 
-  return ret;
+    io_uring_cqe_seen(&g_io_uring, cqe);
+
+    return ret;
+  }
 }
 
 
@@ -156,18 +226,34 @@ int
 close (int fd)
 {
   if(!g_io_uring_initialized){
-      io_uring_infra_init();
+    int res = io_uring_infra_init();
+    if (res == -EINTR) {
+        // User's problem.
+        return res;
+    }
   }
+
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
   io_uring_prep_close(sqe, fd);
-  io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&g_io_uring);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  io_uring_wait_cqe(&g_io_uring, &cqe);
-  int ret = cqe->res;
-  io_uring_cqe_seen(&g_io_uring, cqe);
+  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    int ret = cqe->res;
 
-  return ret;
+    io_uring_cqe_seen(&g_io_uring, cqe);
+
+    return ret;
+  }
 }
