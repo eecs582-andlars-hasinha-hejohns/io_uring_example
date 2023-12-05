@@ -114,6 +114,7 @@ monkey_init_thread_if_needed(){
   if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if(res){
+      // errno should've been set by io_uring_infra_init
       return res;
     }
   }
@@ -138,6 +139,7 @@ open (const char *file, int oflag, ...)
     va_end(args);
     return ret;
 }
+
 int
 monkey_open(const char *file, int oflag, int mode){
     {
