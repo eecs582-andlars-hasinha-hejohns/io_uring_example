@@ -1,6 +1,5 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
-#include <asm-generic/errno-base.h>
 #endif
 #include <liburing.h>
 
