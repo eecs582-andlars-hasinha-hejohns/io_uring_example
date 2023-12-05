@@ -120,9 +120,6 @@ monkey_init_thread_if_needed(){
   return 0;
 }
 
-int
-monkey_open(const char *, int, int);
-
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 int
@@ -178,10 +175,6 @@ monkey_open(const char *file, int oflag, int mode){
   }
 }
 
-// to attach a uprobe to, except it doesn't really work with bpftrace and LD_PRELOAD as is
-ssize_t
-monkey_read(int, void *, size_t);
-
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
 ssize_t
 read (int fd, void *buf, size_t nbytes)
@@ -192,6 +185,7 @@ read (int fd, void *buf, size_t nbytes)
     return ret;
 }
 
+// to attach a uprobe to, except it doesn't really work with bpftrace and LD_PRELOAD as is
 ssize_t
 monkey_read(int fd, void *buf, size_t nbytes)
 {
@@ -228,9 +222,6 @@ monkey_read(int fd, void *buf, size_t nbytes)
     return ret;
   }
 }
-
-ssize_t
-monkey_write(int, const void *, size_t);
 
 /* Write NBYTES of BUF to FD.  Return the number written, or -1.  */
 ssize_t
