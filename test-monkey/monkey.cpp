@@ -1,34 +1,38 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
-#include <cstddef>
-#include <liburing/io_uring.h>
-#include <unistd.h>
 #endif
-//#include <liburing/io_uring.h>
+#include <liburing.h>
 
 #include <stdio.h>
 #include <stdarg.h>
-#include <liburing.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#include <sys/sdt.h> // usdt
+#include <unistd.h>
+#include <cstddef>
 
+// for some reason dynamic userspace probes (uprobe) isn't playing well, so
+// we're using static userspace (usdt) probes
+#include <sys/sdt.h>
+
+// C++
 #include <iostream>
 #include <mutex>
 
 # define __CHECK_OPEN_NEEDS_MODE(oflag) (((oflag) & O_CREAT) != 0 || ((oflag) & __O_TMPFILE) == __O_TMPFILE)
 
-static bool has_anyone_initialized_a_uring = 0;
-static int if_someone_has_this_is_their_fd;
-thread_local static bool g_io_uring_initialized = 0;
-thread_local static struct io_uring g_io_uring;
+static bool monkey_initialized = false; // need to catch the first person who uses a uring
+static int monkey_shared_wq_fd; // see IORING_SETUP_ATTACH_WQ
+// io_uring interface is not thread safe
+// and axboe strongly advises using 1 ring/thread
+thread_local static bool monkey_thread_initialized = 0;
+thread_local static struct io_uring monkey_thread_uring;
 
 // called when shared library is unloaded
 extern "C" void io_uring_infra_deinit(void)
 {
-    // NOTE: this segfaults
+    // NOTE: this segfaults, so let's leave it out indefinitely
     //io_uring_queue_exit(&g_io_uring);
 }
 
@@ -46,8 +50,8 @@ extern "C" int io_uring_infra_init(void)
     static std::mutex m;
     {
         std::lock_guard<std::mutex> l(m);
-        if(has_anyone_initialized_a_uring){
-            p.wq_fd = if_someone_has_this_is_their_fd;
+        if(monkey_initialized){
+            p.wq_fd = monkey_shared_wq_fd;
 #ifndef NDEBUG
 #ifdef DEBUG
             std::cout << "p.wq_fd" << p.wq_fd << std::endl;
@@ -65,7 +69,7 @@ extern "C" int io_uring_infra_init(void)
         std::cout << "&g_io_uring: " << &g_io_uring << std::endl;
 #endif
 #endif
-        int succ = io_uring_queue_init_params(1<<10, &g_io_uring, &p);
+        int succ = io_uring_queue_init_params(1<<10, &monkey_thread_uring, &p);
         if (succ)
         {
             if (succ == -EINTR){
@@ -81,11 +85,11 @@ extern "C" int io_uring_infra_init(void)
         }
         else
         {
-            if(!has_anyone_initialized_a_uring){
-                has_anyone_initialized_a_uring = true;
-                if_someone_has_this_is_their_fd = g_io_uring.ring_fd;
+            if(!monkey_initialized){
+                monkey_initialized = true;
+                monkey_shared_wq_fd = monkey_thread_uring.ring_fd;
             }
-            g_io_uring_initialized = 1;
+            monkey_thread_initialized = 1;
             if(atexit(io_uring_infra_deinit)){
                 perror("atexit");
                 exit(1);
@@ -106,7 +110,7 @@ extern "C" int io_uring_infra_init(void)
 extern "C" int
 open (const char *file, int oflag, ...)
 {
-  if(!g_io_uring_initialized){
+  if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if (res == -EINTR) {
         // User's problem.
@@ -124,16 +128,16 @@ open (const char *file, int oflag, ...)
   }
 
   // emplace request
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   assert(sqe != NULL);
 
   io_uring_prep_openat(sqe, AT_FDCWD, file, oflag | O_LARGEFILE, mode);
-  int res = io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&monkey_thread_uring);
   assert(res > 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
   if (res == -EINTR) {
     // If the syscall was interrupted, the user needs to deal with it.
     return res;
@@ -145,27 +149,30 @@ open (const char *file, int oflag, ...)
   else {
     int ret = cqe->res;
 
-    io_uring_cqe_seen(&g_io_uring, cqe);
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
 
     return ret;
   }
 }
 
-/* Read NBYTES into BUF from FD.  Return the number read or -1.  */
+// to attach a uprobe to, except it doesn't really work with bpftrace and LD_PRELOAD as is
 extern "C" ssize_t
 monkey_read(int, void *, size_t);
+
+/* Read NBYTES into BUF from FD.  Return the number read or -1.  */
 extern "C" ssize_t
 read (int fd, void *buf, size_t nbytes)
 {
     DTRACE_PROBE3(monkey, read_enter, fd, buf, nbytes);
-    auto ret = monkey_read(fd, buf, nbytes); // to attach a uprobe to // jk
+    auto ret = monkey_read(fd, buf, nbytes);
     DTRACE_PROBE3(monkey, read_exit, fd, buf, nbytes);
     return ret;
 }
+
 extern "C" ssize_t
 monkey_read(int fd, void *buf, size_t nbytes)
 {
-  if(!g_io_uring_initialized){
+  if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if (res == -EINTR) {
         // User's problem.
@@ -175,14 +182,14 @@ monkey_read(int fd, void *buf, size_t nbytes)
   ssize_t ret = nbytes;
 
   // emplace request
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_read(sqe, fd, buf, nbytes, -1);
-  int res = io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
   if (res == -EINTR) {
     // If the syscall was interrupted, the user needs to deal with it.
     return res;
@@ -194,7 +201,7 @@ monkey_read(int fd, void *buf, size_t nbytes)
   else {
     ret = cqe->res;
 
-    io_uring_cqe_seen(&g_io_uring, cqe);
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
 
     return ret;
   }
@@ -204,7 +211,7 @@ monkey_read(int fd, void *buf, size_t nbytes)
 ssize_t
 write (int fd, const void *buf, size_t nbytes)
 {
-  if(!g_io_uring_initialized){
+  if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if (res == -EINTR) {
         // User's problem.
@@ -217,14 +224,14 @@ write (int fd, const void *buf, size_t nbytes)
   struct iovec request;
   request.iov_base = (void*)buf;
   request.iov_len  = nbytes;
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_writev(sqe, fd, &request, 1, -1);
-  int res = io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
   if (res == -EINTR) {
     // If the syscall was interrupted, the user needs to deal with it.
     return res;
@@ -236,7 +243,7 @@ write (int fd, const void *buf, size_t nbytes)
   else {
     ret = cqe->res;
 
-    io_uring_cqe_seen(&g_io_uring, cqe);
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
 
     return ret;
   }
@@ -246,7 +253,7 @@ write (int fd, const void *buf, size_t nbytes)
 int
 fsync (int fd)
 {
-  if(!g_io_uring_initialized){
+  if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if (res == -EINTR) {
         // User's problem.
@@ -254,14 +261,14 @@ fsync (int fd)
     }
   }
   // emplace request
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_fsync(sqe, fd, 0);
-  int res = io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
   if (res == -EINTR) {
     // If the syscall was interrupted, the user needs to deal with it.
     return res;
@@ -273,7 +280,7 @@ fsync (int fd)
   else {
     int ret = cqe->res;
 
-    io_uring_cqe_seen(&g_io_uring, cqe);
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
 
     return ret;
   }
@@ -284,7 +291,7 @@ fsync (int fd)
 int
 close (int fd)
 {
-  if(!g_io_uring_initialized){
+  if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
     if (res == -EINTR) {
         // User's problem.
@@ -293,13 +300,13 @@ close (int fd)
   }
 
   // emplace request
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&g_io_uring);
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_close(sqe, fd);
-  int res = io_uring_submit(&g_io_uring);
+  int res = io_uring_submit(&monkey_thread_uring);
 
   // wait for completion
   struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&g_io_uring, &cqe);
+  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
   if (res == -EINTR) {
     // If the syscall was interrupted, the user needs to deal with it.
     return res;
@@ -311,7 +318,7 @@ close (int fd)
   else {
     int ret = cqe->res;
 
-    io_uring_cqe_seen(&g_io_uring, cqe);
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
 
     return ret;
   }
