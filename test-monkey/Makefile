@@ -11,5 +11,5 @@ libmonkey.so: monkey.cpp
 test: multi-threaded-test.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
 clean:
-	rm monkey.so
+	rm libmonkey.so
 .PHONY: clean

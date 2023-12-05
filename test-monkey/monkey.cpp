@@ -1,6 +1,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+#include "monkey.h"
 #include <liburing.h>
 
 #include <stdio.h>
@@ -31,13 +32,13 @@ thread_local static bool monkey_thread_initialized = 0;
 thread_local static struct io_uring monkey_thread_uring;
 
 // called when shared library is unloaded
-extern "C" void io_uring_infra_deinit(void)
+void io_uring_infra_deinit(void)
 {
     // NOTE: this segfaults, so let's leave it out indefinitely
     //io_uring_queue_exit(&g_io_uring);
 }
 
-extern "C" int io_uring_infra_init(void)
+int io_uring_infra_init(void)
 {
     struct io_uring_params p;
 
@@ -108,7 +109,7 @@ extern "C" int io_uring_infra_init(void)
 
 // need to initialize the thread_local uring if it's the thread's first time
 // through monkey
-extern "C" int
+int
 monkey_init_thread_if_needed(){
   if(!monkey_thread_initialized){
     int res = io_uring_infra_init();
@@ -119,12 +120,12 @@ monkey_init_thread_if_needed(){
   return 0;
 }
 
-extern "C" int
+int
 monkey_open(const char *, int, int);
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
-extern "C" int
+int
 open (const char *file, int oflag, ...)
 {
     va_list args;
@@ -140,7 +141,7 @@ open (const char *file, int oflag, ...)
     va_end(args);
     return ret;
 }
-extern "C" int
+int
 monkey_open(const char *file, int oflag, int mode){
     {
         auto ret = monkey_init_thread_if_needed();
@@ -178,11 +179,11 @@ monkey_open(const char *file, int oflag, int mode){
 }
 
 // to attach a uprobe to, except it doesn't really work with bpftrace and LD_PRELOAD as is
-extern "C" ssize_t
+ssize_t
 monkey_read(int, void *, size_t);
 
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
-extern "C" ssize_t
+ssize_t
 read (int fd, void *buf, size_t nbytes)
 {
     DTRACE_PROBE3(monkey, read_enter, fd, buf, nbytes);
@@ -191,7 +192,7 @@ read (int fd, void *buf, size_t nbytes)
     return ret;
 }
 
-extern "C" ssize_t
+ssize_t
 monkey_read(int fd, void *buf, size_t nbytes)
 {
     {
@@ -227,6 +228,9 @@ monkey_read(int fd, void *buf, size_t nbytes)
     return ret;
   }
 }
+
+ssize_t
+monkey_write(int, const void *, size_t);
 
 /* Write NBYTES of BUF to FD.  Return the number written, or -1.  */
 ssize_t
