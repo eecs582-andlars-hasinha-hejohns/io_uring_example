@@ -227,13 +227,20 @@ monkey_read(int fd, void *buf, size_t nbytes)
 ssize_t
 write (int fd, const void *buf, size_t nbytes)
 {
-  if(!monkey_thread_initialized){
-    int res = io_uring_infra_init();
-    if (res == -EINTR) {
-        // User's problem.
-        return res;
+    DTRACE_PROBE3(monkey, write_enter, fd, buf, nbytes);
+    auto ret = monkey_write(fd, buf, nbytes);
+    DTRACE_PROBE3(monkey, write_exit, fd, buf, nbytes);
+    return ret;
+}
+
+ssize_t
+monkey_write(int fd, const void *buf, size_t nbytes){
+    {
+        auto ret = monkey_init_thread_if_needed();
+        if(ret){
+            return -1;
+        }
     }
-  }
   ssize_t ret = nbytes;
 
   // emplace request
@@ -269,13 +276,20 @@ write (int fd, const void *buf, size_t nbytes)
 int
 fsync (int fd)
 {
-  if(!monkey_thread_initialized){
-    int res = io_uring_infra_init();
-    if (res == -EINTR) {
-        // User's problem.
-        return res;
+    DTRACE_PROBE1(monkey, fsync_enter, fd);
+    auto ret = monkey_fsync(fd);
+    DTRACE_PROBE1(monkey, fsync_exit, fd);
+    return ret;
+}
+
+int
+monkey_fsync(int fd){
+    {
+        auto ret = monkey_init_thread_if_needed();
+        if(ret){
+            return -1;
+        }
     }
-  }
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_fsync(sqe, fd, 0);
@@ -307,14 +321,20 @@ fsync (int fd)
 int
 close (int fd)
 {
-  if(!monkey_thread_initialized){
-    int res = io_uring_infra_init();
-    if (res == -EINTR) {
-        // User's problem.
-        return res;
-    }
-  }
+    DTRACE_PROBE1(monkey, close_enter, fd);
+    auto ret = monkey_close(fd);
+    DTRACE_PROBE1(monkey, close_exit, fd);
+    return ret;
+}
 
+int
+monkey_close(int fd){
+    {
+        auto ret = monkey_init_thread_if_needed();
+        if(ret){
+            return -1;
+        }
+    }
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_close(sqe, fd);
