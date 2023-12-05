@@ -1,5 +1,6 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <asm-generic/errno-base.h>
 #endif
 #include <liburing.h>
 
@@ -20,6 +21,7 @@
 #include <iostream>
 #include <mutex>
 
+// for open
 # define __CHECK_OPEN_NEEDS_MODE(oflag) (((oflag) & O_CREAT) != 0 || ((oflag) & __O_TMPFILE) == __O_TMPFILE)
 
 static bool monkey_initialized = false; // need to catch the first person who uses a uring
@@ -45,8 +47,8 @@ extern "C" int io_uring_infra_init(void)
 
     // This doesn't do anything if we never look at io_sq_ring.
     p.sq_thread_idle = 1<<30;
-
     p.flags |= IORING_SETUP_SQPOLL;
+
     static std::mutex m;
     {
         std::lock_guard<std::mutex> l(m);
@@ -105,6 +107,8 @@ extern "C" int io_uring_infra_init(void)
     }
 }
 
+// need to initialize the thread_local uring if it's the thread's first time
+// through monkey
 extern "C" int
 monkey_init_thread_if_needed(){
   if(!monkey_thread_initialized){
@@ -116,27 +120,35 @@ monkey_init_thread_if_needed(){
   return 0;
 }
 
+extern "C" int
+monkey_open(const char *, int, int);
+
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 extern "C" int
 open (const char *file, int oflag, ...)
 {
-  if(!monkey_thread_initialized){
-    int res = io_uring_infra_init();
-    if (res == -EINTR) {
-        // User's problem.
-        return res;
+    va_list args;
+    va_start(args, oflag);
+    int mode = 0;
+    if (__CHECK_OPEN_NEEDS_MODE (oflag))
+    {
+        mode = va_arg (args, int);
     }
-  }
-  int mode = 0;
-
-  if (__CHECK_OPEN_NEEDS_MODE (oflag))
-  {
-    va_list arg;
-    va_start (arg, oflag);
-    mode = va_arg (arg, int);
-    va_end (arg);
-  }
+    DTRACE_PROBE3(monkey, open_entry, file, oflag, mode);
+    auto ret = monkey_open(file, oflag, mode);
+    DTRACE_PROBE3(monkey, open_exit, file, oflag, mode);
+    va_end(args);
+    return ret;
+}
+extern "C" int
+monkey_open(const char *file, int oflag, int mode){
+    {
+        auto ret = monkey_init_thread_if_needed();
+        if(ret){
+            return -1;
+        }
+    }
 
   // emplace request
   struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
@@ -183,9 +195,12 @@ read (int fd, void *buf, size_t nbytes)
 extern "C" ssize_t
 monkey_read(int fd, void *buf, size_t nbytes)
 {
-   if(monkey_init_thread_if_needed()){
-       return -1;
-   }
+    {
+        auto ret = monkey_init_thread_if_needed();
+        if(ret){
+            return -1;
+        }
+    }
   ssize_t ret = nbytes;
 
   // emplace request
