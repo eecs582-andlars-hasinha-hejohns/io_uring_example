@@ -105,6 +105,17 @@ extern "C" int io_uring_infra_init(void)
     }
 }
 
+extern "C" int
+monkey_init_thread_if_needed(){
+  if(!monkey_thread_initialized){
+    int res = io_uring_infra_init();
+    if(res){
+      return res;
+    }
+  }
+  return 0;
+}
+
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 extern "C" int
@@ -172,13 +183,9 @@ read (int fd, void *buf, size_t nbytes)
 extern "C" ssize_t
 monkey_read(int fd, void *buf, size_t nbytes)
 {
-  if(!monkey_thread_initialized){
-    int res = io_uring_infra_init();
-    if (res == -EINTR) {
-        // User's problem.
-        return res;
-    }
-  }
+   if(monkey_init_thread_if_needed()){
+       return -1;
+   }
   ssize_t ret = nbytes;
 
   // emplace request
