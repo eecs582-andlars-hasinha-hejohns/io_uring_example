@@ -177,18 +177,14 @@ monkey_open(const char *file, int oflag, int mode){
   }
 }
 
-ssize_t
-monkey_read_wrapper(const char *fun, int fd, void *buf, size_t nbytes){
-    DTRACE_PROBE3(monkey, read_enter, fd, buf, nbytes);
-    auto ret = monkey_read(fd, buf, nbytes);
-    DTRACE_PROBE3(monkey, read_exit, fd, buf, nbytes);
-    return ret;
-}
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
 ssize_t
 read (int fd, void *buf, size_t nbytes)
 {
-    return monkey_read_wrapper(__FUNCTION__, fd, buf, nbytes);
+    DTRACE_PROBE3(monkey, read_enter, fd, buf, nbytes);
+    auto ret = monkey_read(fd, buf, nbytes);
+    DTRACE_PROBE3(monkey, read_exit, fd, buf, nbytes);
+    return ret;
 }
 
 // to attach a uprobe to, except it doesn't really work with bpftrace and LD_PRELOAD as is
