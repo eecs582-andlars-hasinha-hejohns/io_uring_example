@@ -125,7 +125,7 @@ monkey_init_thread_if_needed(){
 
 // wait for completion
 static int wait_for_completion(){
-    do{
+    while(1){
         struct io_uring_cqe *cqe;
         int res = io_uring_peek_cqe(&monkey_thread_uring, &cqe);
         if (res == -EINTR) {
@@ -146,7 +146,7 @@ static int wait_for_completion(){
 
           return ret;
         }
-    } while(1);
+    }
 }
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
