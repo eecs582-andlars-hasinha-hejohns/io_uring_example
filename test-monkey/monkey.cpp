@@ -183,7 +183,7 @@ monkey_open(const char *file, int oflag, int mode){
 
   io_uring_prep_openat(sqe, AT_FDCWD, file, oflag | O_LARGEFILE, mode);
   int res = io_uring_submit(&monkey_thread_uring);
-  assert(res > 0);
+  assert(res >= 0);
   return wait_for_completion();
 }
 
@@ -297,5 +297,6 @@ monkey_close(int fd){
   struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_close(sqe, fd);
   int res = io_uring_submit(&monkey_thread_uring);
+  assert(res >= 0);
   return wait_for_completion();
 }
