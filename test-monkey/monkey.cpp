@@ -1,5 +1,6 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <ctime>
 #include <sys/wait.h>
 #endif
 #include "monkey.h"
@@ -122,6 +123,32 @@ monkey_init_thread_if_needed(){
   return 0;
 }
 
+// wait for completion
+static int wait_for_completion(){
+    do{
+        struct io_uring_cqe *cqe;
+        int res = io_uring_peek_cqe(&monkey_thread_uring, &cqe);
+        if (res == -EINTR) {
+          // If the syscall was interrupted, the user needs to deal with it.
+          return res;
+        }
+        else if(res == -EAGAIN){
+            continue;
+        }
+        else if (res != 0) {
+          // If the syscall fails for other reasons, it's our problem. 
+          exit(res);
+        }
+        else {
+          int ret = cqe->res;
+
+          io_uring_cqe_seen(&monkey_thread_uring, cqe);
+
+          return ret;
+        }
+    } while(1);
+}
+
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 int
@@ -139,28 +166,6 @@ open (const char *file, int oflag, ...)
     DTRACE_PROBE3(monkey, open_exit, file, oflag, mode);
     va_end(args);
     return ret;
-}
-
-
-// wait for completion
-int wait_for_completion(){
-  struct io_uring_cqe *cqe;
-  int res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    int ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
 }
 
 int
