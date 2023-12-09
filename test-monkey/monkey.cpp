@@ -1,5 +1,6 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <sys/wait.h>
 #endif
 #include "monkey.h"
 #include <liburing.h>
@@ -140,6 +141,28 @@ open (const char *file, int oflag, ...)
     return ret;
 }
 
+
+// wait for completion
+int wait_for_completion(){
+  struct io_uring_cqe *cqe;
+  int res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
+  if (res == -EINTR) {
+    // If the syscall was interrupted, the user needs to deal with it.
+    return res;
+  }
+  else if (res != 0) {
+    // If the syscall fails for other reasons, it's our problem. 
+    exit(res);
+  }
+  else {
+    int ret = cqe->res;
+
+    io_uring_cqe_seen(&monkey_thread_uring, cqe);
+
+    return ret;
+  }
+}
+
 int
 monkey_open(const char *file, int oflag, int mode){
     {
@@ -156,25 +179,7 @@ monkey_open(const char *file, int oflag, int mode){
   io_uring_prep_openat(sqe, AT_FDCWD, file, oflag | O_LARGEFILE, mode);
   int res = io_uring_submit(&monkey_thread_uring);
   assert(res > 0);
-
-  // wait for completion
-  struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    int ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
+  return wait_for_completion();
 }
 
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
@@ -204,25 +209,7 @@ monkey_read(int fd, void *buf, size_t nbytes)
   io_uring_prep_read(sqe, fd, buf, nbytes, -1);
   int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
-
-  // wait for completion
-  struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
+  return wait_for_completion();
 }
 
 /* Write NBYTES of BUF to FD.  Return the number written, or -1.  */
@@ -253,25 +240,7 @@ monkey_write(int fd, const void *buf, size_t nbytes){
   io_uring_prep_writev(sqe, fd, &request, 1, -1);
   int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
-
-  // wait for completion
-  struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
+  return wait_for_completion();
 }
 
 /* Make all changes done to FD actually appear on disk.  */
@@ -297,25 +266,7 @@ monkey_fsync(int fd){
   io_uring_prep_fsync(sqe, fd, 0);
   int res = io_uring_submit(&monkey_thread_uring);
   assert(res >= 0);
-
-  // wait for completion
-  struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    int ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
+  return wait_for_completion();
 }
 
 
@@ -341,23 +292,5 @@ monkey_close(int fd){
   struct io_uring_sqe* sqe = io_uring_get_sqe(&monkey_thread_uring);
   io_uring_prep_close(sqe, fd);
   int res = io_uring_submit(&monkey_thread_uring);
-
-  // wait for completion
-  struct io_uring_cqe *cqe;
-  res = io_uring_wait_cqe(&monkey_thread_uring, &cqe);
-  if (res == -EINTR) {
-    // If the syscall was interrupted, the user needs to deal with it.
-    return res;
-  }
-  else if (res != 0) {
-    // If the syscall fails for other reasons, it's our problem. 
-    exit(res);
-  }
-  else {
-    int ret = cqe->res;
-
-    io_uring_cqe_seen(&monkey_thread_uring, cqe);
-
-    return ret;
-  }
+  return wait_for_completion();
 }
