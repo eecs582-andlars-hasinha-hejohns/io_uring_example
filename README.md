@@ -5,7 +5,7 @@ You will have to install liburing-dev onto your system as follows:
 `sudo apt install -y liburing-dev`
 
 # Overview
-It is recommended to build in the order that everything is listed (i.e., sample_program, test-monkey, glibc)  
+It is recommended to build in the order that everything is listed (i.e., sample_program, libmonkey, glibc)  
 ## sample_program
 The program that does the following:
 * remove file 'sample.txt'
@@ -26,12 +26,12 @@ You may have to modify the read/write bits on the file to view the content to ve
 `make`
 ### running sample_program
 `./sample_program`
-## test-monkey
+## libmonkey
 This houses our implementation with io_uring that performs error checking and supports multi-threaded programs. It is implemented in C++ to allow us to use higher-level mechanisms such as 'thread_local'. Moreover, we have also implemented static user level bpftrace tracepoints (entry + exit) for all 5 of the syscalls we modified.
-### build test-monkey
+### build libmonkey
 `make`  
 ### using libmonkey.so
-We make use of the LD_PRELOAD mechanism to link programs against our implementation of the open, read, write, fsync, and close syscalls. In your terminal navigate to the 'test-monkey' folder. The following command is used to run a program with libmonkey.so:  
+We make use of the LD_PRELOAD mechanism to link programs against our implementation of the open, read, write, fsync, and close syscalls. In your terminal navigate to the 'libmonkey' folder. The following command is used to run a program with libmonkey.so:  
 `LD_PRELOAD=./libmonkey.so ../relative/path/to/your_program`  
 Alternatively, you can use libmonkey.so to run the provided sample program:  
 `LD_PRELOAD=./libmonkey.so ../sample_program/sample_program`  
