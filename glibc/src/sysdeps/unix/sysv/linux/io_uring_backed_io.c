@@ -20,6 +20,7 @@ void io_uring_infra_init(void)
 
 void io_uring_infra_deinit(void)
 {
-    io_uring_queue_exit(&g_io_uring);
+    // there is a missing nullptr check in liburing that causes it to sefgault on destruction
+    //io_uring_queue_exit(&g_io_uring);
     printf("deinit success!\n");
 }
