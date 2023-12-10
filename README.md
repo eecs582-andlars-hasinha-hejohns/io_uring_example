@@ -1,5 +1,8 @@
-# Warning
-Implementation will only work if running linux kernel >= 5.11.x
+# Requirements
+Our implementation will only work on linux kernel version >= 5.11.x, but has only been tested on linux kernel version >= 6.2.x  
+
+You will have to install liburing-dev onto your system as follows:  
+`sudo apt install -y liburing-dev`
 
 # Init
 We first have to install the latest version of liburing and its headers onto our system.
