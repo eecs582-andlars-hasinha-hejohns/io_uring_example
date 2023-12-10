@@ -5,6 +5,9 @@ You will have to install liburing-dev onto your system as follows:
 `sudo apt install -y liburing-dev`
 
 # Overview
+It is recommended to build in the order that everything is listed (i.e., sample_program, test-monkey, glibc)  
+## sample_program
+## test-monkey
 ## glibc
 This is a proof of concept where we showcase that io_uring can be embedded into glibc. Our modified version of glibc contains a basic implementation of io_uring without any multi-threaded support and proper error checking. We make no promises that this will work with all sample programs. It serves as proof that glibc is fundametally capable of linking against liburing. 
 ### build glibc
@@ -26,8 +29,6 @@ In your terminal, navigate to the build folder you created and built glibc in 'g
 `./testrun.sh ../relative/path/to/your_program`  
 Alternatively, you can use the modified glibc to run the provided sample program:  
 `./testrun.sh ../../sample_program/sample_program`  
-## sample_program
-## test-monkey
 
 # Init
 We first have to install the latest version of liburing and its headers onto our system.
