@@ -7,6 +7,25 @@ You will have to install liburing-dev onto your system as follows:
 # Overview
 It is recommended to build in the order that everything is listed (i.e., sample_program, test-monkey, glibc)  
 ## sample_program
+The program that does the following:
+* remove file 'sample.txt'
+* open the file 'sample.txt'
+  * Thus creating the file
+* create a random string that has the following format
+  * 'random number generated for run = XXXXX'
+  * XXXXX is a randomly generated number
+* write the random string to the file
+* fsync file
+* read from file and print contents to screen
+* close file
+  
+You may have to modify the read/write bits on the file to view the content to verify what was reported as read is actually present in the file:  
+`sudo chmod +rw sample.txt`  
+`cat sample.txt`  
+## building sample_program
+`make`
+## running sample_program
+`./sample_program`
 ## test-monkey
 ## glibc
 This is a proof of concept where we showcase that io_uring can be embedded into glibc. Our modified version of glibc contains a basic implementation of io_uring without any multi-threaded support and proper error checking. We make no promises that this will work with all sample programs. It serves as proof that glibc is fundametally capable of linking against liburing. 
