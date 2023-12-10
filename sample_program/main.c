@@ -8,7 +8,10 @@ int main(int argc, char* argv[])
 {
     pid_t pid = getpid();
 
-    int fd = open("sample.txt", O_RDWR | O_CREAT);
+    const char* filename = "sample.txt";
+    remove(filename);
+
+    int fd = open(filename, O_RDWR | O_CREAT);
 
     const char* text = "hello, world\n";
     write(fd, text, strlen(text));
