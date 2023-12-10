@@ -460,7 +460,6 @@ $(call after-link,$@)
 endef
 endif
 # Command for statically linking programs with the C library.
-makeconfig_path := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 ifndef +link-static
 +link-static-before-inputs = -nostdlib -nostartfiles -static \
 	      $(if $($(@F)-no-pie),$(no-pie-ldflag),$(static-pie-ldflag)) \
@@ -477,7 +476,7 @@ ifndef +link-static
 +link-static-after-libc = $(+postctorT) $(+postinit)
 define +link-static
 $(CC) $(+link-static-before-libc) $(link-extra-flags) $(link-libc-static) \
-  $(+link-static-after-libc) $(makeconfig_path)../../install_instructions/liburing/liburing/src/liburing.a
+  $(+link-static-after-libc) /usr/lib/liburing.a
 $(call after-link,$@)
 endef
 define +link-static-tests
