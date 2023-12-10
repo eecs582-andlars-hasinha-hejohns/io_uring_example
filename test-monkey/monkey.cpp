@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <cstddef>
+#include <fcntl.h>
 
 // for some reason dynamic userspace probes (uprobe) isn't playing well, so
 // we're using static userspace (usdt) probes
