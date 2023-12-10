@@ -27,6 +27,14 @@ You may have to modify the read/write bits on the file to view the content to ve
 ### running sample_program
 `./sample_program`
 ## test-monkey
+This houses our implementation with io_uring that performs error checking and supports multi-threaded programs. It is implemented in C++ to allow us to use higher-level mechanisms such as 'thread_local'. Moreover, we have also implemented static user level bpftrace tracepoints (entry + exit) for all 5 of the syscalls we modified.
+### build test-monkey
+`make`  
+### using libmonkey.so
+We make use of the LD_PRELOAD mechanism to link programs against our implementation of the open, read, write, fsync, and close syscalls. In your terminal navigate to the 'test-monkey' folder. The following command is used to run a program with libmonkey.so:  
+`LD_PRELOAD=./libmonkey.so ../relative/path/to/your_program`  
+Alternatively, you can use libmonkey.so to run the provided sample program:  
+`LD_PRELOAD=./libmonkey.so ../sample_program/sample_program`  
 ## glibc
 This is a proof of concept where we showcase that io_uring can be embedded into glibc. Our modified version of glibc contains a basic implementation of io_uring without any multi-threaded support and proper error checking. We make no promises that this will work with all sample programs. It serves as proof that glibc is fundametally capable of linking against liburing. 
 ### build glibc
@@ -44,7 +52,7 @@ If the version is too old then go through the process of upgrading the version (
 Now we build... this can take up to 15 min!  
 `make -j 4`  
 ### using glibc
-In your terminal, navigate to the build folder you created and built glibc in 'glibc/build'. The following command is the run a program using the built modified glibc:  
+In your terminal, navigate to the build folder you created and built glibc in 'glibc/build'. The following command is used to run a program using the built modified glibc:  
 `./testrun.sh ../relative/path/to/your_program`  
 Alternatively, you can use the modified glibc to run the provided sample program:  
 `./testrun.sh ../../sample_program/sample_program`
