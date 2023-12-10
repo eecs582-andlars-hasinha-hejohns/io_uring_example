@@ -22,9 +22,9 @@ The program that does the following:
 You may have to modify the read/write bits on the file to view the content to verify what was reported as read is actually present in the file:  
 `sudo chmod +rw sample.txt`  
 `cat sample.txt`  
-## building sample_program
+### building sample_program
 `make`
-## running sample_program
+### running sample_program
 `./sample_program`
 ## test-monkey
 ## glibc
