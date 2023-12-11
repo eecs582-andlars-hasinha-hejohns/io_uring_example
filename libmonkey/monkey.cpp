@@ -162,7 +162,7 @@ open (const char *file, int oflag, ...)
     {
         mode = va_arg (args, int);
     }
-    DTRACE_PROBE3(monkey, open_entry, file, oflag, mode);
+    DTRACE_PROBE3(monkey, open_enter, file, oflag, mode);
     auto ret = monkey_open(file, oflag, mode);
     DTRACE_PROBE3(monkey, open_exit, file, oflag, mode);
     va_end(args);
